@@ -1,0 +1,667 @@
+/* ═══════════════════════════════════════════════════
+   HJEMMEDASHBOARD — Stilark
+   Rediger kun denne filen for å endre utseende.
+
+   TEMAVARIABLER:
+   Bytt farger, fonter og størrelser under [data-theme]
+   for å tilpasse Sand- og Slate-temaene.
+═══════════════════════════════════════════════════ */
+
+/* ── TEMAER ─────────────────────────────────────── */
+
+[data-theme="sand"] {
+  --bg:        #f0ebe3;
+  --bg2:       #e8e1d7;
+  --surface:   #ede8e0;
+  --surface2:  #e2dcd2;
+  --border:    #cfc8bc;
+  --text:      #2a2420;
+  --muted:     #8a7f74;
+  --accent:    #b5541c;
+  --accent2:   #4a7c6a;
+  --subtle:    #d4c5b2;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --radius:    4px;
+  --shadow:    0 1px 3px rgba(42, 36, 32, .08);
+}
+
+[data-theme="slate"] {
+  --bg:        #1a1c1e;
+  --bg2:       #141618;
+  --surface:   #212427;
+  --surface2:  #292d31;
+  --border:    #383d42;
+  --text:      #dde2e8;
+  --muted:     #727c87;
+  --accent:    #c9a96e;
+  --accent2:   #7aab98;
+  --subtle:    #2e3338;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --radius:    2px;
+  --shadow:    0 1px 4px rgba(0, 0, 0, .3);
+}
+
+/* ── BASE ────────────────────────────────────────── */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 17px;
+  transition: background .4s, color .4s;
+  touch-action: pan-x;
+}
+
+/* Korn-tekstur overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: .025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px;
+}
+
+/* ── OPPSETT-SKJERM ──────────────────────────────── */
+
+#setup-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  transition: background .4s;
+}
+
+.setup-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 3);
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: var(--shadow);
+}
+
+.setup-box h1 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.setup-box p {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 28px;
+  line-height: 1.7;
+}
+
+.setup-label {
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  display: block;
+  font-weight: 600;
+}
+
+.setup-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+
+.setup-input:focus { border-color: var(--accent); }
+
+.setup-section { margin-bottom: 22px; }
+
+.stop-result-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: border-color .2s, background .2s;
+}
+
+.stop-result-item:hover { border-color: var(--accent); }
+
+.stop-result-item small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.stop-searching {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.selected-badge {
+  background: var(--surface2);
+  border: 1px solid var(--accent2);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  margin-top: 8px;
+  display: none;
+  color: var(--accent2);
+}
+
+.selected-badge small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.setup-btn {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity .2s;
+}
+
+.setup-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.theme-toggle-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.theme-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
+  transition: all .2s;
+  text-align: center;
+}
+
+.theme-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg);
+}
+
+.theme-btn span {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+/* ── TANNHJUL-KNAPP ──────────────────────────────── */
+
+#cog-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 150;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  opacity: .4;
+  transition: opacity .2s, background .4s;
+  box-shadow: var(--shadow);
+}
+
+#cog-btn:hover { opacity: 1; }
+
+/* ── SLIDES ──────────────────────────────────────── */
+
+.slides-wrapper {
+  display: flex;
+  width: 300%;
+  height: 100vh;
+  transition: transform .5s cubic-bezier(.4, 0, .2, 1);
+}
+
+.slide {
+  width: 33.333%;
+  height: 100vh;
+  padding: 28px 22px 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+/* ── NAVIGASJONSPUNKTER ──────────────────────────── */
+
+.dots {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+}
+
+.dot {
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--subtle);
+  transition: background .3s, width .3s;
+}
+
+.dot.active {
+  background: var(--accent);
+  width: 32px;
+}
+
+/* ── KORT ────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  transition: background .4s, border-color .4s;
+}
+
+.card-label {
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.card-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+}
+
+.slide-title {
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.slide-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── KLOKKE ──────────────────────────────────────── */
+
+.clock-time {
+  font-family: var(--font-display);
+  font-size: clamp(76px, 18vw, 124px);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1;
+}
+
+[data-theme="sand"] .clock-time { font-weight: 600; }
+
+.clock-date {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ── VÆR ─────────────────────────────────────────── */
+
+.weather-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.weather-icon {
+  font-size: 52px;
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.weather-temp {
+  font-family: var(--font-display);
+  font-size: 62px;
+  font-weight: 600;
+  letter-spacing: -.03em;
+  line-height: 1;
+}
+
+.weather-desc {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.weather-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  margin-top: 16px;
+}
+
+.weather-detail {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.weather-detail span {
+  color: var(--text);
+  font-size: 18px;
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* ── PROGNOSE ────────────────────────────────────── */
+
+.forecast-row {
+  display: flex;
+  gap: 6px;
+}
+
+.forecast-item {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.forecast-item .day {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-weight: 600;
+}
+
+.forecast-item .icon { font-size: 26px; margin: 4px 0; }
+
+.forecast-item .temp {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.forecast-item .precip {
+  font-size: 11px;
+  color: var(--accent2);
+  margin-top: 3px;
+}
+
+/* ── AVGANGER ────────────────────────────────────── */
+
+.departure-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.departure-row:last-child { border-bottom: none; }
+
+.line-badge {
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  text-align: center;
+  min-width: 36px;
+  letter-spacing: .02em;
+}
+
+.line-badge.alt {
+  color: var(--accent2);
+  border-color: var(--accent2);
+}
+
+.departure-dest {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.departure-dest small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+.departure-time {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.departure-time.soon { color: var(--accent); }
+.departure-time.now  { color: var(--accent2); }
+
+/* ── KARTKNAPP ───────────────────────────────────── */
+
+.map-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .2s, color .2s;
+  flex-shrink: 0;
+}
+
+.map-btn:hover,
+.map-btn.active { border-color: var(--accent); color: var(--accent); }
+
+.map-btn.loading { animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+/* ── GENERELT ────────────────────────────────────── */
+
+.departures-scroll {
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.departures-scroll::-webkit-scrollbar { display: none; }
+
+.loading-text {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.error-text { color: var(--accent); }
+
+/* ── KARTOVERLAY ─────────────────────────────────── */
+
+#map-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--bg);
+  display: none;
+  flex-direction: column;
+}
+
+#map-overlay.open { display: flex; }
+
+#map-header {
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+#map-close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color .2s;
+}
+
+#map-close:hover { border-color: var(--accent); }
+
+#map-info { flex: 1; min-width: 0; }
+
+#map-line {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#map-status {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+#map-container {
+  flex: 1;
+  position: relative;
+}
+
+#leaflet-map {
+  width: 100%;
+  height: 100%;
+}
+
+#map-no-signal {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 10;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+  padding: 30px;
+}
+
+/* ── ANIMASJON ───────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.slide .card                { animation: fadeUp .5s ease both; }
+.slide .card:nth-child(2)   { animation-delay: .08s; }
+.slide .card:nth-child(3)   { animation-delay: .16s; }
+.slide .card:nth-child(4)   { animation-delay: .24s; }

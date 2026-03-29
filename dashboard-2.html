@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="no" data-theme="sand">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hjemmedashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="dashboard.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup-screen">
+  <div class="setup-box">
+    <h1>Hjemmedashboard</h1>
+    <p>Søk opp holdeplassen din og skriv inn postnummer for vær.</p>
+    <div class="setup-section">
+      <label class="setup-label">Tema</label>
+      <div class="theme-toggle-row">
+        <button class="theme-btn active" id="theme-sand" onclick="setTheme('sand')"><span>🌿</span>Sand</button>
+        <button class="theme-btn" id="theme-slate" onclick="setTheme('slate')"><span>🪨</span>Slate</button>
+      </div>
+    </div>
+    <div class="setup-section">
+      <label class="setup-label">Holdeplass</label>
+      <input class="setup-input" id="stop-search" type="text" placeholder="Søk etter holdeplass…" autocomplete="off">
+      <div id="stop-results"></div>
+      <div class="selected-badge" id="selected-badge"></div>
+    </div>
+    <div class="setup-section">
+      <label class="setup-label">Postnummer</label>
+      <input class="setup-input" id="postal-input" type="text" inputmode="numeric" maxlength="4" placeholder="F.eks. 7045">
+    </div>
+    <button class="setup-btn" id="save-btn" disabled>Lagre og start</button>
+  </div>
+</div>
+
+<!-- COG -->
+<div id="cog-btn">⚙️</div>
+
+<!-- MAP OVERLAY -->
+<div id="map-overlay">
+  <div id="map-header">
+    <button id="map-close" onclick="closeMap()">✕</button>
+    <div id="map-info">
+      <div id="map-line">—</div>
+      <div id="map-status">Søker etter kjøretøy…</div>
+    </div>
+  </div>
+  <div id="map-container">
+    <div id="leaflet-map"></div>
+    <div id="map-no-signal">
+      <div style="font-size:32px">📡</div>
+      <div>Finner ikke bussen akkurat nå.<br>Kjøretøydata er ikke tilgjengelig for alle avganger.</div>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="slides-wrapper" id="slidesWrapper">
+  <div class="slide">
+    <div class="slide-title">Oversikt</div>
+    <div class="card">
+      <div id="clock-time" class="clock-time">--:--</div>
+      <div id="clock-date" class="clock-date"></div>
+    </div>
+    <div class="card" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-label" id="lbl1">Avganger</div>
+      <div class="departures-scroll"><div id="dep1"><div class="loading-text">Henter avganger…</div></div></div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="slide-title">Vær</div>
+    <div class="card">
+      <div class="card-label" id="wx-lbl">Nå</div>
+      <div class="weather-main">
+        <div class="weather-icon" id="wx-icon">—</div>
+        <div>
+          <div class="weather-temp" id="wx-temp">--°</div>
+          <div class="weather-desc" id="wx-desc">Laster…</div>
+        </div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="weather-details">
+        <div class="weather-detail"><span id="wx-wind">--</span>Vind m/s</div>
+        <div class="weather-detail"><span id="wx-humidity">--</span>Fuktighet %</div>
+        <div class="weather-detail"><span id="wx-precip">--</span>Nedbør mm</div>
+        <div class="weather-detail"><span id="wx-feels">--</span>Føles som</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">5-dagersprognose</div>
+      <div class="forecast-row" id="forecast"><div class="loading-text">…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-label" id="lbl2">Avganger</div>
+      <div id="dep2"><div class="loading-text">…</div></div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="slide-title">Avganger</div>
+    <div class="card" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-label" id="lbl3">Alle avganger</div>
+      <div class="departures-scroll"><div id="dep3"><div class="loading-text">Henter…</div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Oppdatert</div>
+      <div id="last-updated" style="font-size:11px;color:var(--muted)">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="dots">
+  <div class="dot active" id="dot0"></div>
+  <div class="dot" id="dot1"></div>
+  <div class="dot" id="dot2"></div>
+</div>
+
+<script>
+const DAYS   = ['Søndag','Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag'];
+const MONTHS = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
+let config = null;
+let selectedStop = null;
+let currentTheme = 'sand';
+let lastDepartures = [];
+
+// ── THEME ────────────────────────────────────────────
+function setTheme(t) {
+  currentTheme = t;
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('theme-sand').classList.toggle('active', t==='sand');
+  document.getElementById('theme-slate').classList.toggle('active', t==='slate');
+  if (map) { setTimeout(() => map.invalidateSize(), 100); }
+  if (config) { config.theme = t; localStorage.setItem('dashboardConfig', JSON.stringify(config)); }
+}
+
+// ── SETUP ────────────────────────────────────────────
+const stopSearchEl  = document.getElementById('stop-search');
+const stopResultsEl = document.getElementById('stop-results');
+const selectedBadge = document.getElementById('selected-badge');
+const postalEl      = document.getElementById('postal-input');
+const saveBtn       = document.getElementById('save-btn');
+
+function checkReady() { saveBtn.disabled = !(selectedStop && postalEl.value.length===4); }
+
+let stimer = null;
+stopSearchEl.addEventListener('input', () => {
+  clearTimeout(stimer);
+  const q = stopSearchEl.value.trim();
+  if (q.length<2) { stopResultsEl.innerHTML=''; return; }
+  stopResultsEl.innerHTML = '<div class="stop-searching">Søker…</div>';
+  stimer = setTimeout(()=>searchStops(q), 400);
+});
+
+async function searchStops(q) {
+  try {
+    const r = await fetch(`https://api.entur.io/geocoder/v1/autocomplete?text=${encodeURIComponent(q)}&lang=no&size=6&layers=venue`,
+      {headers:{'ET-Client-Name':'hjemmedashboard-privat'}});
+    const data = await r.json();
+    const stops = (data.features||[]).filter(f=>
+      f.properties.category?.some(c=>['onstreetBus','busStation','stopPlace','railStation'].some(t=>c.includes(t))));
+    if (!stops.length) { stopResultsEl.innerHTML='<div class="stop-searching">Ingen treff.</div>'; return; }
+    stopResultsEl.innerHTML = stops.map(f=>{
+      const p=f.properties;
+      return `<div class="stop-result-item" data-id="${p.id}" data-name="${p.name}" data-lon="${f.geometry.coordinates[0]}" data-lat="${f.geometry.coordinates[1]}">${p.name}<small>${p.county||p.region||''}</small></div>`;
+    }).join('');
+    stopResultsEl.querySelectorAll('.stop-result-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        selectedStop={id:el.dataset.id,name:el.dataset.name,lat:parseFloat(el.dataset.lat),lon:parseFloat(el.dataset.lon)};
+        stopResultsEl.innerHTML=''; stopSearchEl.value='';
+        selectedBadge.style.display='block';
+        selectedBadge.innerHTML=`✓ ${selectedStop.name}<small>${selectedStop.id}</small>`;
+        checkReady();
+      });
+    });
+  } catch(e) { stopResultsEl.innerHTML='<div class="stop-searching error-text">Søkefeil.</div>'; }
+}
+
+postalEl.addEventListener('input', checkReady);
+
+saveBtn.addEventListener('click', async ()=>{
+  saveBtn.textContent='Lagrer…'; saveBtn.disabled=true;
+  let lat=selectedStop.lat, lon=selectedStop.lon;
+  try {
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${postalEl.value}&country=NO&format=json&limit=1`);
+    const d=await r.json();
+    if (d.length){lat=parseFloat(d[0].lat);lon=parseFloat(d[0].lon);}
+  } catch(e){}
+  config={stopId:selectedStop.id,stopName:selectedStop.name,stopLat:selectedStop.lat,stopLon:selectedStop.lon,postalCode:postalEl.value,lat,lon,theme:currentTheme};
+  localStorage.setItem('dashboardConfig',JSON.stringify(config));
+  startDashboard();
+});
+
+document.getElementById('cog-btn').addEventListener('click',()=>{
+  if (config){
+    selectedStop={id:config.stopId,name:config.stopName,lat:config.stopLat,lon:config.stopLon};
+    selectedBadge.style.display='block';
+    selectedBadge.innerHTML=`✓ ${config.stopName}<small>${config.stopId}</small>`;
+    postalEl.value=config.postalCode;
+    setTheme(config.theme||'sand'); checkReady();
+  }
+  document.getElementById('setup-screen').style.display='flex';
+});
+
+// ── START ────────────────────────────────────────────
+function startDashboard(){
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('cog-btn').style.display='flex';
+  setTheme(config.theme||'sand');
+  const n=config.stopName.length>26?config.stopName.slice(0,26)+'…':config.stopName;
+  ['lbl1','lbl2','lbl3'].forEach(id=>document.getElementById(id).textContent=n);
+  document.getElementById('wx-lbl').textContent='Nå — '+config.postalCode;
+  initMap(); initClock(); fetchWeather(); fetchDepartures();
+  setInterval(fetchDepartures,30000);
+  setInterval(fetchWeather,600000);
+}
+
+// ── CLOCK ────────────────────────────────────────────
+function initClock(){
+  function tick(){
+    const d=new Date();
+    document.getElementById('clock-time').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    document.getElementById('clock-date').textContent=DAYS[d.getDay()]+' '+d.getDate()+'. '+MONTHS[d.getMonth()];
+  }
+  setInterval(tick,1000); tick();
+}
+
+// ── WEATHER ──────────────────────────────────────────
+function wxIcon(c){return c===0?'☀️':c<=2?'🌤️':c<=3?'☁️':c<=49?'🌫️':c<=69?'🌧️':c<=79?'🌨️':'⛈️';}
+function wxDesc(c){return c===0?'Klarvær':c<=2?'Delvis skyet':c<=3?'Overskyet':c<=49?'Tåke':c<=59?'Yr':c<=69?'Regn':c<=79?'Snø':c<=82?'Byger':'Torden';}
+
+async function fetchWeather(){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${config.lat}&longitude=${config.lon}&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,relativehumidity_2m,precipitation&daily=weathercode,temperature_2m_max,precipitation_sum&timezone=Europe%2FOslo&forecast_days=6`);
+    const data=await r.json(); const c=data.current;
+    document.getElementById('wx-icon').textContent=wxIcon(c.weathercode);
+    document.getElementById('wx-temp').textContent=Math.round(c.temperature_2m)+'°';
+    document.getElementById('wx-desc').textContent=wxDesc(c.weathercode);
+    document.getElementById('wx-wind').textContent=Math.round(c.windspeed_10m);
+    document.getElementById('wx-humidity').textContent=c.relativehumidity_2m;
+    document.getElementById('wx-precip').textContent=c.precipitation;
+    document.getElementById('wx-feels').textContent=Math.round(c.apparent_temperature)+'°';
+    const dd=data.daily;
+    document.getElementById('forecast').innerHTML=dd.date.slice(1,6).map((ds,i)=>{
+      const idx=i+1,d=new Date(ds);
+      return `<div class="forecast-item"><div class="day">${DAYS[d.getDay()].slice(0,3)}</div><div class="icon">${wxIcon(dd.weathercode[idx])}</div><div class="temp">${Math.round(dd.temperature_2m_max[idx])}°</div><div class="precip">${dd.precipitation_sum[idx]}mm</div></div>`;
+    }).join('');
+  }catch(e){document.getElementById('wx-desc').textContent='Feil ved lasting';}
+}
+
+// ── DEPARTURES ───────────────────────────────────────
+function tLabel(exp,now){
+  const d=Math.round((exp-now)/60000);
+  if(d<=0) return['Nå','now'];
+  if(d<=2)  return[d+' min','soon'];
+  if(d<60)  return[d+' min',''];
+  return[String(exp.getHours()).padStart(2,'0')+':'+String(exp.getMinutes()).padStart(2,'0'),''];
+}
+
+async function fetchDepartures(){
+  const q=`{stopPlace(id:"${config.stopId}"){estimatedCalls(timeRange:72000,numberOfDepartures:14){realtime expectedDepartureTime destinationDisplay{frontText}serviceJourney{id journeyPattern{line{publicCode}}}}}}`;
+  try{
+    const r=await fetch('https://api.entur.io/journey-planner/v3/graphql',{
+      method:'POST',headers:{'Content-Type':'application/json','ET-Client-Name':'hjemmedashboard-privat'},
+      body:JSON.stringify({query:q})
+    });
+    const data=await r.json();
+    const calls=data?.data?.stopPlace?.estimatedCalls;
+    if(!calls?.length) throw new Error('Ingen avganger');
+    lastDepartures=calls;
+    const now=new Date();
+
+    const makeRows=(mini)=>calls.map((call,idx)=>{
+      const exp=new Date(call.expectedDepartureTime);
+      const lc=call.serviceJourney?.journeyPattern?.line?.publicCode||'?';
+      const dest=call.destinationDisplay?.frontText||'—';
+      const [tl,tc]=tLabel(exp,now);
+      const alt=parseInt(lc)%2===0?'alt':'';
+      const sjId=call.serviceJourney?.id||'';
+      return `<div class="departure-row">
+        <div class="line-badge ${alt}">${lc}</div>
+        <div class="departure-dest">${dest}${mini?'':'<small>'+(call.realtime?'sanntid':'rutetid')+'</small>'}</div>
+        <div class="departure-time ${tc}">${tl}</div>
+        <button class="map-btn" title="Vis på kart" onclick="openMap('${sjId}','${lc} → ${dest.replace(/'/g,'')}')">🗺</button>
+      </div>`;
+    }).join('');
+
+    document.getElementById('dep1').innerHTML=makeRows(false);
+    document.getElementById('dep3').innerHTML=makeRows(false);
+    document.getElementById('dep2').innerHTML=calls.slice(0,4).map((call)=>{
+      const exp=new Date(call.expectedDepartureTime);
+      const lc=call.serviceJourney?.journeyPattern?.line?.publicCode||'?';
+      const dest=call.destinationDisplay?.frontText||'—';
+      const [tl,tc]=tLabel(exp,now);
+      const alt=parseInt(lc)%2===0?'alt':'';
+      const sjId=call.serviceJourney?.id||'';
+      return `<div class="departure-row">
+        <div class="line-badge ${alt}">${lc}</div>
+        <div class="departure-dest">${dest}</div>
+        <div class="departure-time ${tc}">${tl}</div>
+        <button class="map-btn" title="Vis på kart" onclick="openMap('${sjId}','${lc} → ${dest.replace(/'/g,'')}')">🗺</button>
+      </div>`;
+    }).join('');
+
+    const ts=new Date();
+    document.getElementById('last-updated').textContent=String(ts.getHours()).padStart(2,'0')+':'+String(ts.getMinutes()).padStart(2,'0')+':'+String(ts.getSeconds()).padStart(2,'0');
+  }catch(e){
+    const err=`<div class="loading-text error-text">${e.message}</div>`;
+    ['dep1','dep3'].forEach(id=>document.getElementById(id).innerHTML=err);
+  }
+}
+
+// ── MAP ──────────────────────────────────────────────
+let map=null, busMarker=null, stopMarker=null, mapTimer=null;
+let activeJourneyId=null;
+
+function initMap(){
+  map=L.map('leaflet-map',{zoomControl:true,attributionControl:true});
+
+  // Tile layer: light for sand, dark for slate
+  const tileUrl=currentTheme==='slate'
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+  L.tileLayer(tileUrl,{
+    attribution:'© OpenStreetMap, © CARTO',
+    subdomains:'abcd', maxZoom:19
+  }).addTo(map);
+
+  // Stop marker
+  const stopIcon=L.divIcon({
+    className:'',
+    html:`<div style="width:14px;height:14px;border-radius:50%;background:var(--accent2);border:2px solid var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+    iconSize:[14,14], iconAnchor:[7,7]
+  });
+  stopMarker=L.marker([config.stopLat,config.stopLon],{icon:stopIcon})
+    .addTo(map)
+    .bindPopup(`<b>${config.stopName}</b><br>Din holdeplass`);
+}
+
+function updateTileLayer(){
+  if(!map) return;
+  map.eachLayer(l=>{ if(l instanceof L.TileLayer) map.removeLayer(l); });
+  const tileUrl=currentTheme==='slate'
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  L.tileLayer(tileUrl,{attribution:'© OpenStreetMap, © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+}
+
+async function openMap(journeyId, label){
+  if(!journeyId){ alert('Ingen kjøretøydata for denne avgangen.'); return; }
+  activeJourneyId=journeyId;
+  document.getElementById('map-line').textContent=label;
+  document.getElementById('map-status').textContent='Søker etter kjøretøy…';
+  document.getElementById('map-overlay').classList.add('open');
+  document.getElementById('map-no-signal').style.display='none';
+
+  updateTileLayer();
+  setTimeout(()=>map.invalidateSize(),100);
+
+  // Center on stop first
+  map.setView([config.stopLat,config.stopLon],14);
+
+  await trackVehicle(journeyId);
+  clearInterval(mapTimer);
+  mapTimer=setInterval(()=>trackVehicle(activeJourneyId),15000);
+}
+
+function closeMap(){
+  document.getElementById('map-overlay').classList.remove('open');
+  clearInterval(mapTimer);
+  activeJourneyId=null;
+  if(busMarker){ busMarker.remove(); busMarker=null; }
+}
+
+async function trackVehicle(journeyId){
+  // Use Entur SIRI-VM REST (XML), filter by journey
+  // We use the GraphQL vehicle positions endpoint instead
+  const q=`{serviceJourney(id:"${journeyId}"){estimatedCalls{actualArrivalTime expectedArrivalTime quay{id name coordinates{latitude longitude}}}}}`;
+  try {
+    // Try to get vehicle position from Entur JourneyPlanner
+    const r=await fetch('https://api.entur.io/journey-planner/v3/graphql',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','ET-Client-Name':'hjemmedashboard-privat'},
+      body:JSON.stringify({query:q})
+    });
+    const data=await r.json();
+    const calls=data?.data?.serviceJourney?.estimatedCalls;
+
+    // Find the last stop the bus has departed from (has actualArrivalTime)
+    if(calls && calls.length>0){
+      // Find last passed stop
+      let lastPassed=null;
+      for(const c of calls){
+        if(c.actualArrivalTime && c.quay?.coordinates){
+          lastPassed=c;
+        }
+      }
+      // Find next upcoming stop
+      let nextStop=null;
+      for(const c of calls){
+        if(!c.actualArrivalTime && c.quay?.coordinates){
+          nextStop=c; break;
+        }
+      }
+
+      if(nextStop || lastPassed){
+        const pos=nextStop
+          ? [nextStop.quay.coordinates.latitude, nextStop.quay.coordinates.longitude]
+          : [lastPassed.quay.coordinates.latitude, lastPassed.quay.coordinates.longitude];
+
+        const nextName=nextStop?nextStop.quay.name:'Endestopp';
+        const now=new Date();
+        const eta=nextStop?.expectedArrivalTime?Math.round((new Date(nextStop.expectedArrivalTime)-now)/60000):null;
+
+        placeBusMarker(pos[0],pos[1],nextName,eta);
+        const etaStr=eta!==null?(eta<=0?'ankommer nå':eta+' min':''): '';
+        document.getElementById('map-status').textContent=`Neste: ${nextName}${etaStr?' — '+etaStr:''}`;
+        document.getElementById('map-no-signal').style.display='none';
+        return;
+      }
+    }
+    showNoSignal();
+  } catch(e){
+    showNoSignal();
+  }
+}
+
+function placeBusMarker(lat,lon,nextStop,etaMin){
+  const busIcon=L.divIcon({
+    className:'',
+    html:`<div style="
+      width:32px;height:32px;border-radius:50%;
+      background:var(--accent);border:3px solid white;
+      box-shadow:0 2px 8px rgba(0,0,0,.4);
+      display:flex;align-items:center;justify-content:center;
+      font-size:16px;
+    ">🚌</div>`,
+    iconSize:[32,32],iconAnchor:[16,16]
+  });
+
+  if(busMarker){
+    busMarker.setLatLng([lat,lon]);
+  } else {
+    busMarker=L.marker([lat,lon],{icon:busIcon}).addTo(map);
+  }
+
+  const etaStr=etaMin!==null?(etaMin<=0?'Ankommer nå':etaMin+' min til '+nextStop):'';
+  busMarker.bindPopup(`<b>Bussen</b><br>${etaStr||'Siste kjente posisjon'}`);
+
+  // Fit map to show both bus and stop
+  const bounds=L.latLngBounds([[lat,lon],[config.stopLat,config.stopLon]]);
+  map.fitBounds(bounds,{padding:[40,40]});
+}
+
+function showNoSignal(){
+  document.getElementById('map-no-signal').style.display='flex';
+  document.getElementById('map-status').textContent='Ingen kjøretøydata tilgjengelig';
+}
+
+// ── SWIPE ────────────────────────────────────────────
+let slide=0,tx=0,ty=0;
+const wrapper=document.getElementById('slidesWrapper');
+function goTo(n){
+  slide=Math.max(0,Math.min(2,n));
+  wrapper.style.transform=`translateX(-${slide*33.333}%)`;
+  for(let i=0;i<3;i++) document.getElementById('dot'+i).classList.toggle('active',i===slide);
+}
+document.addEventListener('touchstart',e=>{
+  if(document.getElementById('map-overlay').classList.contains('open')) return;
+  tx=e.touches[0].clientX; ty=e.touches[0].clientY;
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(document.getElementById('map-overlay').classList.contains('open')) return;
+  const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>40) goTo(slide+(dx<0?1:-1));
+},{passive:true});
+
+// ── INIT ─────────────────────────────────────────────
+try{
+  const saved=localStorage.getItem('dashboardConfig');
+  if(saved){config=JSON.parse(saved);startDashboard();}
+}catch(e){}
+</script>
+</body>
+</html>
