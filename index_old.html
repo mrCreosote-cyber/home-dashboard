@@ -29,6 +29,7 @@
       <input class="setup-input" id="stop-search" type="text" placeholder="Søk etter holdeplass…" autocomplete="off">
       <div id="stop-results"></div>
       <div class="selected-badge" id="selected-badge"></div>
+      <div id="quay-list"></div>
     </div>
     <div class="setup-section">
       <label class="setup-label">Postnummer</label>
@@ -134,13 +135,16 @@ var THEMES = {
   slate: { accent: '#c9a96e', accent2: '#7aab98', surface: '#212427', dark: true }
 };
 var ENTUR = { 'Content-Type': 'application/json', 'ET-Client-Name': 'hjemmedashboard-privat' };
+var JP_URL = 'https://api.entur.io/journey-planner/v3/graphql';
+var CALL_FIELDS = 'estimatedCalls(timeRange:72000,numberOfDepartures:14){realtime expectedDepartureTime ' +
+                  'destinationDisplay{frontText}serviceJourney{id journeyPattern{line{publicCode}}}}';
 
 var config = null;
 var selectedStop = null;
 var currentTheme = 'sand';
 var map = null, tileLayer = null, busMarker = null, mapTimer = null, activeJourneyId = null;
 var depTimer = null, wxTimer = null, clockTimer = null;
-var searchSeq = 0;
+var searchSeq = 0, quaySeq = 0, wxLoaded = false, wxRetry = null;
 
 // ── HJELPERE ─────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
@@ -205,10 +209,12 @@ var selectedBadge = $('selected-badge');
 var postalEl      = $('postal-input');
 var saveBtn       = $('save-btn');
 
-function checkReady() { saveBtn.disabled = !(selectedStop && postalEl.value.length === 4); }
+var quayListEl = $('quay-list');
+function checkReady() { saveBtn.disabled = !(selectedStop && selectedStop.ready && postalEl.value.length === 4); }
 function showSelected() {
   selectedBadge.style.display = 'block';
-  selectedBadge.innerHTML = '✓ ' + esc(selectedStop.name) + '<small>' + esc(selectedStop.id) + '</small>';
+  selectedBadge.innerHTML = '✓ ' + esc(selectedStop.name) + (selectedStop.quayLabel ? ' — ' + esc(selectedStop.quayLabel) : '') +
+                            '<small>' + esc(selectedStop.id) + '</small>';
 }
 
 var stimer = null;
@@ -256,12 +262,74 @@ function searchStops(q) {
       (function (el) {
         el.addEventListener('click', function () {
           var f = stops[parseInt(el.getAttribute('data-i'), 10)];
-          selectedStop = { id: f.properties.id, name: f.properties.name,
+          selectedStop = { id: f.properties.id, name: f.properties.name, quayId: null, quayLabel: '', ready: false,
                            lat: parseFloat(f.geometry.coordinates[1]), lon: parseFloat(f.geometry.coordinates[0]) };
           stopResultsEl.innerHTML = ''; stopSearchEl.value = '';
           showSelected(); checkReady();
+          loadQuays(selectedStop, null);
         }, false);
       })(items[n]);
+    }
+  });
+}
+
+// En holdeplass har ofte ett stoppested per side av gaten (quay). Brukeren velger hvilket som skal vises.
+function quayTitle(q) { return q.description || (q.publicCode ? 'Plattform ' + q.publicCode : 'Stoppested'); }
+function quayDests(q) {
+  var seen = {}, out = [], calls = q.estimatedCalls || [];
+  for (var i = 0; i < calls.length; i++) {
+    var d = calls[i].destinationDisplay && calls[i].destinationDisplay.frontText;
+    if (d && !seen[d]) { seen[d] = true; out.push(d); }
+  }
+  return out.slice(0, 3);
+}
+function pickQuay(stop, q) {
+  if (stop !== selectedStop) { return; }
+  var dests = q ? quayDests(q) : [];
+  stop.quayId = q ? q.id : null;
+  stop.quayLabel = q ? (dests.length ? 'mot ' + dests.join(', ') : quayTitle(q)) : '';
+  stop.ready = true;
+  showSelected(); checkReady();
+}
+function loadQuays(stop, preselectId) {
+  var seq = ++quaySeq;
+  quayListEl.innerHTML = '<div class="stop-searching">Henter retninger…</div>';
+  var q = '{stopPlace(id:"' + stop.id + '"){quays{id publicCode description ' +
+          'estimatedCalls(numberOfDepartures:4,timeRange:86400){destinationDisplay{frontText}}}}}';
+  ajax('POST', JP_URL, ENTUR, JSON.stringify({ query: q }), function (err, data) {
+    if (seq !== quaySeq || stop !== selectedStop) { return; }
+    var all = !err && data && data.data && data.data.stopPlace && data.data.stopPlace.quays;
+    if (!all || !all.length) {
+      quayListEl.innerHTML = '<div class="stop-searching">Fant ikke retninger. Alle avganger fra holdeplassen vises.</div>';
+      pickQuay(stop, null);
+      return;
+    }
+    var quays = [], i;
+    for (i = 0; i < all.length; i++) {
+      if ((all[i].estimatedCalls && all[i].estimatedCalls.length) || all[i].id === preselectId) { quays.push(all[i]); }
+    }
+    if (!quays.length) { quays = all; }
+    if (quays.length === 1) { quayListEl.innerHTML = ''; pickQuay(stop, quays[0]); return; }
+    var html = '<div class="stop-searching">Velg side/retning:</div>';
+    for (i = 0; i < quays.length; i++) {
+      var dests = quayDests(quays[i]);
+      html += '<div class="stop-result-item quay-item' + (quays[i].id === preselectId ? ' selected' : '') +
+              '" data-i="' + i + '">' + esc(quayTitle(quays[i])) +
+              '<small>' + (dests.length ? 'Mot: ' + esc(dests.join(', ')) : 'Ingen avganger akkurat nå') + '</small></div>';
+    }
+    quayListEl.innerHTML = html;
+    var items = quayListEl.querySelectorAll('.quay-item');
+    for (var n = 0; n < items.length; n++) {
+      (function (el) {
+        el.addEventListener('click', function () {
+          for (var m = 0; m < items.length; m++) { items[m].classList.remove('selected'); }
+          el.classList.add('selected');
+          pickQuay(stop, quays[parseInt(el.getAttribute('data-i'), 10)]);
+        }, false);
+      })(items[n]);
+    }
+    if (preselectId) {
+      for (i = 0; i < quays.length; i++) { if (quays[i].id === preselectId) { pickQuay(stop, quays[i]); } }
     }
   });
 }
@@ -275,7 +343,8 @@ saveBtn.addEventListener('click', function () {
             '&country=NO&format=json&limit=1';
   ajax('GET', url, {}, null, function (err, d) {
     if (!err && d && d.length) { lat = parseFloat(d[0].lat); lon = parseFloat(d[0].lon); }
-    config = { stopId: selectedStop.id, stopName: selectedStop.name, stopLat: selectedStop.lat,
+    config = { stopId: selectedStop.id, stopName: selectedStop.name, quayId: selectedStop.quayId,
+               quayLabel: selectedStop.quayLabel, stopLat: selectedStop.lat,
                stopLon: selectedStop.lon, postalCode: postalEl.value, lat: lat, lon: lon, theme: currentTheme };
     store('dashboardConfig', JSON.stringify(config));
     saveBtn.textContent = 'Lagre og start';
@@ -285,8 +354,10 @@ saveBtn.addEventListener('click', function () {
 
 $('cog-btn').addEventListener('click', function () {
   if (config) {
-    selectedStop = { id: config.stopId, name: config.stopName, lat: config.stopLat, lon: config.stopLon };
+    selectedStop = { id: config.stopId, name: config.stopName, lat: config.stopLat, lon: config.stopLon,
+                     quayId: config.quayId || null, quayLabel: config.quayLabel || '', ready: true };
     showSelected();
+    loadQuays(selectedStop, config.quayId || null);
     postalEl.value = config.postalCode;
     setTheme(config.theme || 'sand'); checkReady();
   }
@@ -298,7 +369,8 @@ function startDashboard() {
   $('setup-screen').style.display = 'none';
   showFlex($('cog-btn'));
   setTheme(config.theme || 'sand');
-  var n = config.stopName.length > 26 ? config.stopName.slice(0, 26) + '…' : config.stopName;
+  var full = config.stopName + (config.quayLabel ? ' · ' + config.quayLabel : '');
+  var n = full.length > 38 ? full.slice(0, 38) + '…' : full;
   var ids = ['lbl1', 'lbl2', 'lbl3'];
   for (var i = 0; i < ids.length; i++) { $(ids[i]).textContent = n; }
   $('wx-lbl').textContent = 'Nå — ' + config.postalCode;
@@ -361,30 +433,61 @@ function wxDesc(c) {
   return 'Torden';
 }
 
+function pick(o, a, b) { return o[a] !== undefined ? o[a] : o[b]; }
+
+function weatherUrl(modern) {
+  var lat = isFinite(config.lat) ? config.lat : config.stopLat;
+  var lon = isFinite(config.lon) ? config.lon : config.stopLon;
+  var cur = modern ? 'temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,precipitation'
+                   : 'temperature_2m,apparent_temperature,weathercode,windspeed_10m,relativehumidity_2m,precipitation';
+  var day = modern ? 'weather_code,temperature_2m_max,precipitation_sum' : 'weathercode,temperature_2m_max,precipitation_sum';
+  return 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+         '&current=' + cur + '&daily=' + day + '&' + (modern ? 'wind_speed_unit' : 'windspeed_unit') +
+         '=ms&timezone=Europe%2FOslo&forecast_days=6';
+}
+
+function weatherFailed(msg) {
+  if (!wxLoaded) { $('wx-desc').textContent = 'Ingen værdata: ' + msg; }
+  clearTimeout(wxRetry);
+  wxRetry = setTimeout(fetchWeather, 60000);
+}
+
+function showWeather(data) {
+  var c = data.current, dd = data.daily;
+  var code = pick(c, 'weather_code', 'weathercode');
+  $('wx-icon').innerHTML = wxIcon(code);
+  $('wx-temp').textContent = Math.round(c.temperature_2m) + '°';
+  $('wx-desc').textContent = wxDesc(code);
+  $('wx-wind').textContent = Math.round(pick(c, 'wind_speed_10m', 'windspeed_10m'));
+  $('wx-humidity').textContent = pick(c, 'relative_humidity_2m', 'relativehumidity_2m');
+  $('wx-precip').textContent = c.precipitation;
+  $('wx-feels').textContent = Math.round(c.apparent_temperature) + '°';
+  var codes = pick(dd, 'weather_code', 'weathercode');
+  var html = '';
+  for (var i = 1; i <= 5 && i < dd.time.length; i++) {
+    var p = dd.time[i].split('-');
+    var wd = new Date(+p[0], +p[1] - 1, +p[2]).getDay();
+    html += '<div class="forecast-item"><div class="day">' + DAYS[wd].slice(0, 3) + '</div>' +
+            '<div class="icon">' + wxIcon(codes[i]) + '</div>' +
+            '<div class="temp">' + Math.round(dd.temperature_2m_max[i]) + '°</div>' +
+            '<div class="precip">' + dd.precipitation_sum[i] + 'mm</div></div>';
+  }
+  $('forecast').innerHTML = html;
+  wxLoaded = true;
+}
+
 function fetchWeather() {
-  var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + config.lat + '&longitude=' + config.lon +
-    '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,relativehumidity_2m,precipitation' +
-    '&daily=weathercode,temperature_2m_max,precipitation_sum&windspeed_unit=ms&timezone=Europe%2FOslo&forecast_days=6';
-  ajax('GET', url, {}, null, function (err, data) {
-    if (err || !data || !data.current || !data.daily) { $('wx-desc').textContent = 'Feil ved lasting'; return; }
-    var c = data.current, dd = data.daily;
-    $('wx-icon').innerHTML = wxIcon(c.weathercode);
-    $('wx-temp').textContent = Math.round(c.temperature_2m) + '°';
-    $('wx-desc').textContent = wxDesc(c.weathercode);
-    $('wx-wind').textContent = Math.round(c.windspeed_10m);
-    $('wx-humidity').textContent = c.relativehumidity_2m;
-    $('wx-precip').textContent = c.precipitation;
-    $('wx-feels').textContent = Math.round(c.apparent_temperature) + '°';
-    var html = '';
-    for (var i = 1; i <= 5 && i < dd.time.length; i++) {
-      var p = dd.time[i].split('-');
-      var wd = new Date(+p[0], +p[1] - 1, +p[2]).getDay();
-      html += '<div class="forecast-item"><div class="day">' + DAYS[wd].slice(0, 3) + '</div>' +
-              '<div class="icon">' + wxIcon(dd.weathercode[i]) + '</div>' +
-              '<div class="temp">' + Math.round(dd.temperature_2m_max[i]) + '°</div>' +
-              '<div class="precip">' + dd.precipitation_sum[i] + 'mm</div></div>';
+  ajax('GET', weatherUrl(true), {}, null, function (err, data) {
+    if (err && err.message.indexOf('HTTP 4') === 0) {
+      // Faller tilbake til de eldre variabelnavnene hvis de nye ikke godtas
+      ajax('GET', weatherUrl(false), {}, null, function (err2, data2) {
+        if (err2 || !data2 || !data2.current || !data2.daily) { weatherFailed(err2 ? err2.message : 'ugyldig svar'); return; }
+        try { showWeather(data2); } catch (e) { weatherFailed('uventet svar'); }
+      });
+      return;
     }
-    $('forecast').innerHTML = html;
+    if (err || !data || !data.current || !data.daily) { weatherFailed(err ? err.message : 'ugyldig svar'); return; }
+    try { showWeather(data); } catch (e) { weatherFailed('uventet svar'); }
   });
 }
 
@@ -419,11 +522,12 @@ function rowHtml(call, now, withSmall) {
 }
 
 function fetchDepartures() {
-  var q = '{stopPlace(id:"' + config.stopId + '"){estimatedCalls(timeRange:72000,numberOfDepartures:14){' +
-          'realtime expectedDepartureTime destinationDisplay{frontText}' +
-          'serviceJourney{id journeyPattern{line{publicCode}}}}}}';
-  ajax('POST', 'https://api.entur.io/journey-planner/v3/graphql', ENTUR, JSON.stringify({ query: q }), function (err, data) {
-    var calls = !err && data && data.data && data.data.stopPlace && data.data.stopPlace.estimatedCalls;
+  var q = config.quayId
+    ? '{quay(id:"' + config.quayId + '"){' + CALL_FIELDS + '}}'
+    : '{stopPlace(id:"' + config.stopId + '"){' + CALL_FIELDS + '}}';
+  ajax('POST', JP_URL, ENTUR, JSON.stringify({ query: q }), function (err, data) {
+    var node = data && data.data && (config.quayId ? data.data.quay : data.data.stopPlace);
+    var calls = !err && node && node.estimatedCalls;
     if (err || !calls || !calls.length) {
       var msg = err ? err.message : 'Ingen avganger';
       var html = '<div class="loading-text error-text">' + esc(msg) + '</div>';
