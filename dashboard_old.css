@@ -109,23 +109,6 @@ html[data-theme="slate"] .weather-detail{color:#727c87}
 html[data-theme="sand"] .weather-detail span{color:#2a2420;font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
 html[data-theme="slate"] .weather-detail span{color:#dde2e8;font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
 .wx-svg{display:block;width:1em;height:1em}
-.forecast-row{display:-webkit-flex;display:flex}
-.forecast-item{padding:10px 8px;text-align:center;-webkit-flex:1 1 0px;flex:1 1 0px;min-width:0}
-html[data-theme="sand"] .forecast-item{background:#e2dcd2;border-radius:4px}
-html[data-theme="slate"] .forecast-item{background:#292d31;border-radius:2px}
-.forecast-item + .forecast-item{margin-left:6px}
-.forecast-item .day{font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em;font-weight:600}
-html[data-theme="sand"] .forecast-item .day{color:#8a7f74}
-html[data-theme="slate"] .forecast-item .day{color:#727c87}
-.forecast-item .icon{font-size:26px;margin:4px auto;display:inline-block}
-html[data-theme="sand"] .forecast-item .icon{color:#b5541c}
-html[data-theme="slate"] .forecast-item .icon{color:#c9a96e}
-.forecast-item .temp{font-size:17px;font-weight:600}
-html[data-theme="sand"] .forecast-item .temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
-html[data-theme="slate"] .forecast-item .temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
-.forecast-item .precip{font-size:11px;margin-top:3px}
-html[data-theme="sand"] .forecast-item .precip{color:#4a7c6a}
-html[data-theme="slate"] .forecast-item .precip{color:#7aab98}
 .departure-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;padding:10px 0}
 html[data-theme="sand"] .departure-row + .departure-row{border-top:1px solid #cfc8bc}
 html[data-theme="slate"] .departure-row + .departure-row{border-top:1px solid #383d42}
@@ -192,3 +175,42 @@ html[data-theme="slate"] #map-no-signal{background:#1a1c1e;color:#727c87}
 html[data-theme="sand"] .quay-item.selected{border-color:#4a7c6a;color:#4a7c6a}
 html[data-theme="slate"] .quay-item.selected{border-color:#7aab98;color:#7aab98}
 #quay-list{margin-top:4px}
+.top-row{display:-webkit-flex;display:flex;-webkit-flex-shrink:0;flex-shrink:0}
+.top-cell{-webkit-flex:1 1 0px;flex:1 1 0px;min-width:0;padding:16px 18px}
+.top-row > .top-cell + .top-cell{margin-left:16px}
+.top-cell .clock-time{font-size:13vw}
+.top-cell .clock-date{font-size:12px;margin-top:6px}
+.mini-wx-main{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.mini-wx-icon{font-size:40px;line-height:1;margin-right:10px;-webkit-flex-shrink:0;flex-shrink:0}
+html[data-theme="sand"] .mini-wx-icon{color:#b5541c}
+html[data-theme="slate"] .mini-wx-icon{color:#c9a96e}
+.mini-wx-temp{font-size:46px;font-weight:600;letter-spacing:-.03em;line-height:1}
+html[data-theme="sand"] .mini-wx-temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
+html[data-theme="slate"] .mini-wx-temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
+.mini-wx-desc{font-size:14px;margin-top:8px}
+html[data-theme="sand"] .mini-wx-desc{color:#8a7f74}
+html[data-theme="slate"] .mini-wx-desc{color:#727c87}
+.mini-wx-sub{font-size:12px;margin-top:4px}
+html[data-theme="sand"] .mini-wx-sub{color:#8a7f74}
+html[data-theme="slate"] .mini-wx-sub{color:#727c87}
+@media (min-width:800px){
+.top-cell .clock-time{font-size:104px}
+}
+.day-grid{display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;margin:0 -2px}
+.day-slot{width:12.5%;padding:0 2px 5px}
+.slot-in{padding:6px 1px;text-align:center}
+html[data-theme="sand"] .slot-in{background:#e2dcd2;border-radius:4px}
+html[data-theme="slate"] .slot-in{background:#292d31;border-radius:2px}
+.slot-in .h{font-size:11px;margin-bottom:2px;letter-spacing:.06em;font-weight:600}
+html[data-theme="sand"] .slot-in .h{color:#8a7f74}
+html[data-theme="slate"] .slot-in .h{color:#727c87}
+.slot-in .icon{font-size:22px;margin:2px auto;display:inline-block}
+html[data-theme="sand"] .slot-in .icon{color:#b5541c}
+html[data-theme="slate"] .slot-in .icon{color:#c9a96e}
+.slot-in .temp{font-size:15px;font-weight:600}
+html[data-theme="sand"] .slot-in .temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
+html[data-theme="slate"] .slot-in .temp{font-family:'Plus Jakarta Sans', Roboto, 'Helvetica Neue', Arial, sans-serif}
+.slot-in .precip{font-size:10px;margin-top:2px}
+html[data-theme="sand"] .slot-in .precip{color:#4a7c6a}
+html[data-theme="slate"] .slot-in .precip{color:#7aab98}
+.map-debug{font-size:11px;max-width:100%;word-break:break-word;opacity:.8}
