@@ -7,7 +7,7 @@
 <title>Hjemmedashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=DM+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="dashboard.css">
+<link rel="stylesheet" href="dashboard_old.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
@@ -56,7 +56,6 @@
     <div id="map-no-signal">
       <div style="font-size:32px">📡</div>
       <div>Finner ikke bussen akkurat nå.<br>Kjøretøydata er ikke tilgjengelig for alle avganger.</div>
-      <div id="map-debug" class="map-debug"></div>
     </div>
   </div>
 </div>
@@ -65,19 +64,9 @@
 <div class="slides-wrapper" id="slidesWrapper">
   <div class="slide">
     <div class="slide-title">Oversikt</div>
-    <div class="top-row">
-      <div class="card top-cell">
-        <div id="clock-time" class="clock-time">--:--</div>
-        <div id="clock-date" class="clock-date"></div>
-      </div>
-      <div class="card top-cell">
-        <div class="mini-wx-main">
-          <div class="mini-wx-icon" id="wxm-icon"></div>
-          <div class="mini-wx-temp" id="wxm-temp">--°</div>
-        </div>
-        <div class="mini-wx-desc" id="wxm-desc">Laster…</div>
-        <div class="mini-wx-sub" id="wxm-sub"></div>
-      </div>
+    <div class="card">
+      <div id="clock-time" class="clock-time">--:--</div>
+      <div id="clock-date" class="clock-date"></div>
     </div>
     <div class="card card-fill">
       <div class="card-label" id="lbl1">Avganger</div>
@@ -105,8 +94,8 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-label" id="day-lbl">Resten av dagen, time for time</div>
-      <div class="day-grid" id="dayfc"><div class="loading-text">…</div></div>
+      <div class="card-label">5-dagersprognose</div>
+      <div class="forecast-row" id="forecast"><div class="loading-text">…</div></div>
     </div>
     <div class="card">
       <div class="card-label" id="lbl2">Avganger</div>
@@ -148,7 +137,7 @@ var THEMES = {
 var ENTUR = { 'Content-Type': 'application/json', 'ET-Client-Name': 'hjemmedashboard-privat' };
 var JP_URL = 'https://api.entur.io/journey-planner/v3/graphql';
 var CALL_FIELDS = 'estimatedCalls(timeRange:72000,numberOfDepartures:14){realtime expectedDepartureTime ' +
-                  'destinationDisplay{frontText}serviceJourney{id journeyPattern{line{id publicCode}}}}';
+                  'destinationDisplay{frontText}serviceJourney{id journeyPattern{line{publicCode}}}}';
 
 var config = null;
 var selectedStop = null;
@@ -156,7 +145,6 @@ var currentTheme = 'sand';
 var map = null, tileLayer = null, busMarker = null, mapTimer = null, activeJourneyId = null;
 var depTimer = null, wxTimer = null, clockTimer = null;
 var searchSeq = 0, quaySeq = 0, wxLoaded = false, wxRetry = null;
-var wxHours = null, wxRenderKey = '', wxTry = 0, lastCalls = [], dep2Count = 4;
 
 // ── HJELPERE ─────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
@@ -181,11 +169,7 @@ function ajax(method, url, headers, body, cb) {
       var d;
       try { d = JSON.parse(x.responseText); } catch (e) { cb(new Error('Ugyldig svar')); return; }
       cb(null, d);
-    } else {
-      var e2 = new Error('HTTP ' + x.status);
-      try { e2.data = JSON.parse(x.responseText); } catch (ex) {}
-      cb(e2);
-    }
+    } else { cb(new Error('HTTP ' + x.status)); }
   };
   x.onerror = function () { cb(new Error('Nettverksfeil')); };
   x.ontimeout = function () { cb(new Error('Tidsavbrudd')); };
@@ -404,10 +388,6 @@ function initClock() {
     var d = new Date();
     $('clock-time').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
     $('clock-date').textContent = DAYS[d.getDay()] + ' ' + d.getDate() + '. ' + MONTHS[d.getMonth()];
-    if (wxHours) {
-      if (todayStr(d) !== wxHours.date && d.getTime() - wxTry > 60000) { wxTry = d.getTime(); fetchWeather(); }
-      if (wxRenderKey !== todayStr(d) + ' ' + d.getHours()) { renderDay(); }
-    }
   }
   clockTimer = setInterval(tick, 1000); tick();
 }
@@ -453,43 +433,6 @@ function wxDesc(c) {
   return 'Torden';
 }
 
-function todayStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-
-// Timesblokker fra og med neste hele time og ut dagen. Etter kl. 23 vises hele morgendagen.
-// Tegnes på nytt når timen skifter.
-function renderDay() {
-  if (!wxHours) { return; }
-  var now = new Date(), today = todayStr(now);
-  wxRenderKey = today + ' ' + now.getHours();
-  var date = today, first = now.getHours() + 1, label = 'Resten av dagen, time for time';
-  if (first > 23) {
-    date = todayStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    first = 0; label = 'I morgen, time for time';
-  }
-  var html = '', n = 0;
-  for (var i = 0; i < wxHours.h.length; i++) {
-    var x = wxHours.h[i];
-    if (x.date !== date || x.hour < first) { continue; }
-    n++;
-    html += '<div class="day-slot"><div class="slot-in"><div class="h">' + pad(x.hour) + '</div>' +
-            '<div class="icon">' + wxIcon(x.code) + '</div>' +
-            '<div class="temp">' + Math.round(x.temp) + '°</div>' +
-            '<div class="precip">' + (x.rain >= 0.1 ? (Math.round(x.rain * 10) / 10) + 'mm' : '&nbsp;') + '</div></div></div>';
-  }
-  if (!n) { html = '<div class="loading-text">Oppdaterer…</div>'; }
-  $('day-lbl').textContent = label;
-  $('dayfc').innerHTML = html;
-  // Mange rader med timer tar plass: vis én avgang mindre så siden fortsatt passer
-  var want = Math.ceil(n / 8) >= 3 ? 3 : 4;
-  if (want !== dep2Count) { dep2Count = want; renderDep2(); }
-}
-
-function renderDep2() {
-  var now = new Date(), html = '';
-  for (var i = 0; i < lastCalls.length && i < dep2Count; i++) { html += rowHtml(lastCalls[i], now, false); }
-  $('dep2').innerHTML = html;
-}
-
 function pick(o, a, b) { return o[a] !== undefined ? o[a] : o[b]; }
 
 function weatherUrl(modern) {
@@ -497,52 +440,39 @@ function weatherUrl(modern) {
   var lon = isFinite(config.lon) ? config.lon : config.stopLon;
   var cur = modern ? 'temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,precipitation'
                    : 'temperature_2m,apparent_temperature,weathercode,windspeed_10m,relativehumidity_2m,precipitation';
-  var hr = modern ? 'temperature_2m,weather_code,precipitation' : 'temperature_2m,weathercode,precipitation';
+  var day = modern ? 'weather_code,temperature_2m_max,precipitation_sum' : 'weathercode,temperature_2m_max,precipitation_sum';
   return 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
-         '&current=' + cur + '&hourly=' + hr + '&' + (modern ? 'wind_speed_unit' : 'windspeed_unit') +
-         '=ms&timezone=Europe%2FOslo&forecast_days=2';
+         '&current=' + cur + '&daily=' + day + '&' + (modern ? 'wind_speed_unit' : 'windspeed_unit') +
+         '=ms&timezone=Europe%2FOslo&forecast_days=6';
 }
 
 function weatherFailed(msg) {
-  if (!wxLoaded) {
-    $('wx-desc').textContent = 'Ingen værdata: ' + msg;
-    $('wxm-desc').textContent = 'Ingen værdata';
-    $('wxm-sub').textContent = msg;
-  }
+  if (!wxLoaded) { $('wx-desc').textContent = 'Ingen værdata: ' + msg; }
   clearTimeout(wxRetry);
   wxRetry = setTimeout(fetchWeather, 60000);
 }
 
 function showWeather(data) {
-  var c = data.current, hh = data.hourly;
+  var c = data.current, dd = data.daily;
   var code = pick(c, 'weather_code', 'weathercode');
-  var icon = wxIcon(code), desc = wxDesc(code), temp = Math.round(c.temperature_2m) + '°';
-  var wind = Math.round(pick(c, 'wind_speed_10m', 'windspeed_10m'));
-  var feels = Math.round(c.apparent_temperature) + '°';
-
-  // Vær nå (side 2)
-  $('wx-icon').innerHTML = icon;
-  $('wx-temp').textContent = temp;
-  $('wx-desc').textContent = desc;
-  $('wx-wind').textContent = wind;
+  $('wx-icon').innerHTML = wxIcon(code);
+  $('wx-temp').textContent = Math.round(c.temperature_2m) + '°';
+  $('wx-desc').textContent = wxDesc(code);
+  $('wx-wind').textContent = Math.round(pick(c, 'wind_speed_10m', 'windspeed_10m'));
   $('wx-humidity').textContent = pick(c, 'relative_humidity_2m', 'relativehumidity_2m');
   $('wx-precip').textContent = c.precipitation;
-  $('wx-feels').textContent = feels;
-  // Vær nå (forsiden)
-  $('wxm-icon').innerHTML = icon;
-  $('wxm-temp').textContent = temp;
-  $('wxm-desc').textContent = desc;
-  $('wxm-sub').textContent = 'Føles som ' + feels + ' · Vind ' + wind + ' m/s';
-
-  // Lagre timene fra dagens varsel og tegn dem
-  var codes = pick(hh, 'weather_code', 'weathercode');
-  var list = [], date = hh.time[0].slice(0, 10);
-  for (var i = 0; i < hh.time.length; i++) {
-    list.push({ date: hh.time[i].slice(0, 10), hour: parseInt(hh.time[i].slice(11, 13), 10),
-                temp: hh.temperature_2m[i], code: codes[i], rain: hh.precipitation[i] || 0 });
+  $('wx-feels').textContent = Math.round(c.apparent_temperature) + '°';
+  var codes = pick(dd, 'weather_code', 'weathercode');
+  var html = '';
+  for (var i = 1; i <= 5 && i < dd.time.length; i++) {
+    var p = dd.time[i].split('-');
+    var wd = new Date(+p[0], +p[1] - 1, +p[2]).getDay();
+    html += '<div class="forecast-item"><div class="day">' + DAYS[wd].slice(0, 3) + '</div>' +
+            '<div class="icon">' + wxIcon(codes[i]) + '</div>' +
+            '<div class="temp">' + Math.round(dd.temperature_2m_max[i]) + '°</div>' +
+            '<div class="precip">' + dd.precipitation_sum[i] + 'mm</div></div>';
   }
-  wxHours = { date: date, h: list };
-  renderDay();
+  $('forecast').innerHTML = html;
   wxLoaded = true;
 }
 
@@ -551,12 +481,12 @@ function fetchWeather() {
     if (err && err.message.indexOf('HTTP 4') === 0) {
       // Faller tilbake til de eldre variabelnavnene hvis de nye ikke godtas
       ajax('GET', weatherUrl(false), {}, null, function (err2, data2) {
-        if (err2 || !data2 || !data2.current || !data2.hourly) { weatherFailed(err2 ? err2.message : 'ugyldig svar'); return; }
+        if (err2 || !data2 || !data2.current || !data2.daily) { weatherFailed(err2 ? err2.message : 'ugyldig svar'); return; }
         try { showWeather(data2); } catch (e) { weatherFailed('uventet svar'); }
       });
       return;
     }
-    if (err || !data || !data.current || !data.hourly) { weatherFailed(err ? err.message : 'ugyldig svar'); return; }
+    if (err || !data || !data.current || !data.daily) { weatherFailed(err ? err.message : 'ugyldig svar'); return; }
     try { showWeather(data); } catch (e) { weatherFailed('uventet svar'); }
   });
 }
@@ -578,7 +508,6 @@ function rowHtml(call, now, withSmall) {
   var exp = parseIso(call.expectedDepartureTime);
   var sj = call.serviceJourney || {};
   var lc = (sj.journeyPattern && sj.journeyPattern.line && sj.journeyPattern.line.publicCode) || '?';
-  var lineId = (sj.journeyPattern && sj.journeyPattern.line && sj.journeyPattern.line.id) || '';
   var dest = (call.destinationDisplay && call.destinationDisplay.frontText) || '—';
   var tl = tLabel(exp, now);
   var alt = parseInt(lc, 10) % 2 === 0 ? ' alt' : '';
@@ -588,7 +517,7 @@ function rowHtml(call, now, withSmall) {
       (withSmall ? '<small>' + (call.realtime ? 'sanntid' : 'rutetid') + '</small>' : '') + '</div>' +
     '<div class="departure-time ' + tl[1] + '">' + tl[0] + '</div>' +
     '<button class="map-btn" type="button" title="Vis på kart" data-sj="' + esc(sj.id || '') +
-      '" data-line="' + esc(lineId) + '" data-label="' + esc(lc + ' → ' + dest) + '">' + PIN + '</button>' +
+      '" data-label="' + esc(lc + ' → ' + dest) + '">' + PIN + '</button>' +
     '</div>';
 }
 
@@ -605,12 +534,14 @@ function fetchDepartures() {
       $('dep1').innerHTML = html; $('dep2').innerHTML = html; $('dep3').innerHTML = html;
       return;
     }
-    var now = new Date(), all = '';
-    for (var i = 0; i < calls.length; i++) { all += rowHtml(calls[i], now, true); }
-    lastCalls = calls;
+    var now = new Date(), all = '', few = '';
+    for (var i = 0; i < calls.length; i++) {
+      all += rowHtml(calls[i], now, true);
+      if (i < 4) { few += rowHtml(calls[i], now, false); }
+    }
     $('dep1').innerHTML = all;
     $('dep3').innerHTML = all;
-    renderDep2();
+    $('dep2').innerHTML = few;
     $('last-updated').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   });
 }
@@ -618,7 +549,7 @@ function fetchDepartures() {
 document.addEventListener('click', function (e) {
   var el = e.target;
   while (el && el !== document && !(el.classList && el.classList.contains('map-btn'))) { el = el.parentNode; }
-  if (el && el !== document) { openMap(el.getAttribute('data-sj'), el.getAttribute('data-label'), el.getAttribute('data-line')); }
+  if (el && el !== document) { openMap(el.getAttribute('data-sj'), el.getAttribute('data-label')); }
 }, false);
 
 // ── KART ─────────────────────────────────────────────
@@ -650,10 +581,10 @@ function updateTileLayer() {
   tileLayer = L.tileLayer(tileUrl(), { attribution: '© OpenStreetMap, © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
 }
 
-function openMap(journeyId, label, lineRef) {
+function openMap(journeyId, label) {
   if (!map) { alert('Kartet er ikke tilgjengelig akkurat nå.'); return; }
   if (!journeyId) { alert('Ingen kjøretøydata for denne avgangen.'); return; }
-  activeJourneyId = journeyId; activeLineRef = lineRef || '';
+  activeJourneyId = journeyId;
   $('map-line').textContent = label;
   $('map-status').textContent = 'Søker etter kjøretøy…';
   $('map-overlay').classList.add('open');
@@ -661,10 +592,9 @@ function openMap(journeyId, label, lineRef) {
   updateTileLayer();
   setTimeout(function () { map.invalidateSize(); }, 100);
   map.setView([config.stopLat, config.stopLon], 14);
-  $('map-debug').textContent = '';
-  trackVehicle(journeyId, activeLineRef);
+  trackVehicle(journeyId);
   clearInterval(mapTimer);
-  mapTimer = setInterval(function () { trackVehicle(activeJourneyId, activeLineRef); }, 15000);
+  mapTimer = setInterval(function () { trackVehicle(activeJourneyId); }, 15000);
 }
 
 function closeMap() {
@@ -675,137 +605,40 @@ function closeMap() {
 }
 $('map-close').addEventListener('click', closeMap, false);
 
-function showNoSignal(notes) {
+function showNoSignal() {
   showFlex($('map-no-signal'));
   $('map-status').textContent = 'Ingen kjøretøydata tilgjengelig';
-  $('map-debug').textContent = notes && notes.length ? notes.join(' | ') : '';
 }
 
-// Entur: sanntidsposisjoner for kjøretøy (egen tjeneste, skilt fra rutedataene)
-var VEH_URL = 'https://api.entur.io/realtime/v2/vehicles/graphql';
-var VEH_FIELDS = 'vehicleId lastUpdated bearing location{latitude longitude} line{lineRef publicCode}';
-var activeLineRef = '';
-
-function gqlError(err, data) {
-  var d = (err && err.data) || data;
-  if (d && d.errors && d.errors.length) { return String(d.errors[0].message || 'GraphQL-feil').slice(0, 160); }
-  return err ? err.message : '';
-}
-
-// cb(feilmelding, liste). Bare kjøretøy med posisjon og oppdatering de siste fem minuttene regnes med.
-function vehicleQuery(selector, cb) {
-  var q = '{' + selector + '{' + VEH_FIELDS + '}}';
-  ajax('POST', VEH_URL, ENTUR, JSON.stringify({ query: q }), function (err, data) {
-    var m = gqlError(err, data);
-    if (m) { cb(m); return; }
-    var all = (data && data.data && data.data.vehicles) || [], out = [];
-    for (var i = 0; i < all.length; i++) {
-      var v = all[i];
-      if (!v || !v.location || v.location.latitude === null || v.location.latitude === undefined) { continue; }
-      if (v.lastUpdated && (new Date().getTime() - parseIso(v.lastUpdated).getTime()) > 300000) { continue; }
-      out.push(v);
+function trackVehicle(journeyId) {
+  var q = '{serviceJourney(id:"' + journeyId + '"){estimatedCalls{actualArrivalTime expectedArrivalTime ' +
+          'quay{id name coordinates{latitude longitude}}}}}';
+  ajax('POST', 'https://api.entur.io/journey-planner/v3/graphql', ENTUR, JSON.stringify({ query: q }), function (err, data) {
+    if (journeyId !== activeJourneyId) { return; }
+    var calls = !err && data && data.data && data.data.serviceJourney && data.data.serviceJourney.estimatedCalls;
+    if (!calls || !calls.length) { showNoSignal(); return; }
+    var lastPassed = null, nextStop = null, i, c;
+    for (i = 0; i < calls.length; i++) {
+      c = calls[i];
+      if (c.actualArrivalTime && c.quay && c.quay.coordinates) { lastPassed = c; }
     }
-    cb(null, out);
+    for (i = 0; i < calls.length; i++) {
+      c = calls[i];
+      if (!c.actualArrivalTime && c.quay && c.quay.coordinates) { nextStop = c; break; }
+    }
+    var ref = nextStop || lastPassed;
+    if (!ref) { showNoSignal(); return; }
+    var nextName = nextStop ? nextStop.quay.name : 'Endestopp';
+    var eta = (nextStop && nextStop.expectedArrivalTime)
+      ? Math.round((parseIso(nextStop.expectedArrivalTime) - new Date()) / 60000) : null;
+    placeBusMarker(ref.quay.coordinates.latitude, ref.quay.coordinates.longitude, nextName, eta);
+    var etaStr = eta !== null ? (eta <= 0 ? 'ankommer nå' : eta + ' min') : '';
+    $('map-status').textContent = 'Neste: ' + nextName + (etaStr ? ' — ' + etaStr : '');
+    $('map-no-signal').style.display = 'none';
   });
 }
 
-function distM(lat1, lon1, lat2, lon2) {
-  var p = Math.PI / 180, dLat = (lat2 - lat1) * p, dLon = (lon2 - lon1) * p;
-  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(lat1 * p) * Math.cos(lat2 * p) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return 2 * 6371000 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-function bearingTo(lat1, lon1, lat2, lon2) {
-  var p = Math.PI / 180, dLon = (lon2 - lon1) * p;
-  var y = Math.sin(dLon) * Math.cos(lat2 * p);
-  var x = Math.cos(lat1 * p) * Math.sin(lat2 * p) - Math.sin(lat1 * p) * Math.cos(lat2 * p) * Math.cos(dLon);
-  return (Math.atan2(y, x) / p + 360) % 360;
-}
-
-// Blant alle kjøretøy på linja: nærmeste som kjører mot holdeplassen (ellers nærmeste uansett)
-function pickNearest(list) {
-  var best = null, bestAny = null;
-  for (var i = 0; i < list.length; i++) {
-    var v = list[i], lat = v.location.latitude, lon = v.location.longitude;
-    var d = distM(lat, lon, config.stopLat, config.stopLon);
-    var towards = true;
-    if (v.bearing !== null && v.bearing !== undefined) {
-      var diff = Math.abs(((v.bearing - bearingTo(lat, lon, config.stopLat, config.stopLon) + 540) % 360) - 180);
-      towards = diff < 90;
-    }
-    var item = { v: v, d: d, towards: towards };
-    if (!bestAny || d < bestAny.d) { bestAny = item; }
-    if (towards && (!best || d < best.d)) { best = item; }
-  }
-  return best || bestAny;
-}
-
-function ageText(v) {
-  if (!v.lastUpdated) { return ''; }
-  var s = Math.round((new Date().getTime() - parseIso(v.lastUpdated).getTime()) / 1000);
-  return s < 90 ? ' (oppdatert for ' + Math.max(s, 0) + ' s siden)' : ' (oppdatert for ' + Math.round(s / 60) + ' min siden)';
-}
-
-function trackVehicle(journeyId, lineRef) {
-  var notes = [];
-  function stale() { return journeyId !== activeJourneyId; }
-
-  function timetableFallback() {
-    // Siste utvei: stoppestedet bussen er på vei til, ut fra rutetabellen
-    var q = '{serviceJourney(id:"' + journeyId + '"){estimatedCalls{actualArrivalTime expectedArrivalTime ' +
-            'quay{name latitude longitude}}}}';
-    ajax('POST', JP_URL, ENTUR, JSON.stringify({ query: q }), function (err, data) {
-      if (stale()) { return; }
-      var m = gqlError(err, data);
-      var calls = !m && data && data.data && data.data.serviceJourney && data.data.serviceJourney.estimatedCalls;
-      if (!calls || !calls.length) { notes.push('C: ' + (m || 'ingen data')); showNoSignal(notes); return; }
-      var last = null, next = null, i, c;
-      for (i = 0; i < calls.length; i++) {
-        c = calls[i];
-        if (c.quay && c.quay.latitude !== null && c.quay.latitude !== undefined) {
-          if (c.actualArrivalTime) { last = c; } else if (!next) { next = c; }
-        }
-      }
-      var ref = next || last;
-      if (!ref) { notes.push('C: ingen stopp med posisjon'); showNoSignal(notes); return; }
-      var eta = (next && next.expectedArrivalTime) ? Math.round((parseIso(next.expectedArrivalTime) - new Date()) / 60000) : null;
-      placeBusMarker(ref.quay.latitude, ref.quay.longitude, 'Beregnet fra rutetabellen');
-      $('map-status').textContent = 'Ingen GPS-posisjon. Neste stopp: ' + (next ? next.quay.name : 'endestopp') +
-        (eta !== null ? (eta <= 0 ? ' — ankommer nå' : ' — ' + eta + ' min') : '');
-      $('map-no-signal').style.display = 'none';
-    });
-  }
-
-  // A) kjøretøyet som kjører akkurat denne avgangen
-  vehicleQuery('vehicles(serviceJourneyId:"' + journeyId + '")', function (errA, listA) {
-    if (stale()) { return; }
-    if (!errA && listA && listA.length) {
-      var v = listA[0];
-      placeBusMarker(v.location.latitude, v.location.longitude, 'Bussens posisjon');
-      $('map-status').textContent = 'Bussen er på kartet' + ageText(v);
-      $('map-no-signal').style.display = 'none';
-      return;
-    }
-    notes.push('A: ' + (errA || 'ingen kjøretøy'));
-    if (!lineRef) { timetableFallback(); return; }
-    // B) alle kjøretøy på linja: velg det som er nærmest og på vei mot holdeplassen
-    vehicleQuery('vehicles(lineRef:"' + lineRef + '")', function (errB, listB) {
-      if (stale()) { return; }
-      var pick = !errB && listB && listB.length ? pickNearest(listB) : null;
-      if (pick) {
-        placeBusMarker(pick.v.location.latitude, pick.v.location.longitude, 'Nærmeste buss på linja');
-        $('map-status').textContent = 'Nærmeste buss på linja, ' + Math.round(pick.d / 10) * 10 + ' m unna' +
-          (pick.towards ? '' : ' (kjører trolig bort fra holdeplassen)') + ageText(pick.v);
-        $('map-no-signal').style.display = 'none';
-        return;
-      }
-      notes.push('B: ' + (errB || 'ingen kjøretøy'));
-      timetableFallback();
-    });
-  });
-}
-
-function placeBusMarker(lat, lon, text) {
+function placeBusMarker(lat, lon, nextStop, etaMin) {
   var th = THEMES[currentTheme];
   var busIcon = L.divIcon({
     className: '',
@@ -817,7 +650,8 @@ function placeBusMarker(lat, lon, text) {
   });
   if (busMarker) { busMarker.setLatLng([lat, lon]); }
   else { busMarker = L.marker([lat, lon], { icon: busIcon }).addTo(map); }
-  busMarker.bindPopup('<b>Bussen</b><br>' + esc(text));
+  var txt = etaMin !== null ? (etaMin <= 0 ? 'Ankommer nå' : etaMin + ' min til ' + esc(nextStop)) : 'Siste kjente posisjon';
+  busMarker.bindPopup('<b>Bussen</b><br>' + txt);
   map.fitBounds(L.latLngBounds([[lat, lon], [config.stopLat, config.stopLon]]), { padding: [40, 40] });
 }
 
